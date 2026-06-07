@@ -1,0 +1,11 @@
+{
+	"enabled": true,
+	"required": false,
+	"mod_override": true,
+	"type": "polymer:external",
+	"settings": {
+		"address": "https://packs.example.com"
+	},
+	"include_hash_in_name": true,
+	"cache_control_max_age": 31536000
+}

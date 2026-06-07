@@ -1,0 +1,7 @@
+{
+  "accountId": "your_cloudflare_account_id",
+  "accessKeyId": "your_r2_access_key_id",
+  "secretAccessKey": "your_r2_secret_access_key",
+  "bucket": "your_bucket_name",
+  "publicBaseUrl": "https://packs.example.com"
+}

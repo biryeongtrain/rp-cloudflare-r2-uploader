@@ -1,0 +1,39 @@
+{
+	"schemaVersion": 1,
+	"id": "rp-r2-uploader",
+	"version": "${version}",
+	"name": "rp-r2-uploader",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/rp-r2-uploader/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"kim.biryeong.Rpr2uploader"
+		],
+		"client": [
+			"kim.biryeong.client.Rpr2uploaderClient"
+		]
+	},
+	"mixins": [
+		"rp-r2-uploader.mixins.json",
+		{
+			"config": "rp-r2-uploader.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.2",
+		"minecraft": "~1.21.8",
+		"java": ">=21",
+		"fabric-api": "*",
+		"polymer-autohost": ">=0.13.13+1.21.8"
+	}
+}
