@@ -1,12 +1,14 @@
 package kim.biryeong;
 
 import com.sun.net.httpserver.HttpServer;
+import eu.pb4.polymer.resourcepack.api.OutputGenerator;
 
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
@@ -23,8 +25,34 @@ public final class R2ResourcePackUploadTest {
 		usesPolymerAutoHostMainPackPathForObjectKey();
 		normalizesBaseUrlTrailingSlashes();
 		buildsExpectedR2Urls();
+		handlesPolymerZipCompletionWithoutCredentials();
 		failsOverDnsAddressesWithoutRetryingHttpErrorsOrFollowingRedirects();
-		System.out.println("R2 uploader checks passed: paths, DNS failover, signed body, HTTP errors, redirects.");
+		System.out.println("R2 uploader checks passed: paths, Polymer completion, DNS failover, signed body, HTTP errors, redirects.");
+	}
+
+	private static void handlesPolymerZipCompletionWithoutCredentials() throws Exception {
+		var directory = Files.createTempDirectory("r2-polymer-completion-");
+		var config = directory.resolve("rp-r2-uploader.json");
+		String previous = System.getProperty(R2UploaderModConfig.CONFIG_PROPERTY);
+		System.setProperty(R2UploaderModConfig.CONFIG_PROPERTY, config.toString());
+		try {
+			R2ResourcePackUpload.uploadMainPack(new Object());
+			if (Files.exists(config)) {
+				throw new AssertionError("Non-ZIP output must not trigger uploader configuration");
+			}
+			R2ResourcePackUpload.uploadMainPack(new OutputGenerator.Result(directory.resolve("pack.zip"), "hash", false));
+			if (!Files.isRegularFile(config)) {
+				throw new AssertionError("ZIP completion must reach the uploader's missing-config handling");
+			}
+		} finally {
+			if (previous == null) {
+				System.clearProperty(R2UploaderModConfig.CONFIG_PROPERTY);
+			} else {
+				System.setProperty(R2UploaderModConfig.CONFIG_PROPERTY, previous);
+			}
+			Files.deleteIfExists(config);
+			Files.delete(directory);
+		}
 	}
 
 	private static void usesPolymerAutoHostMainPackPathForObjectKey() {

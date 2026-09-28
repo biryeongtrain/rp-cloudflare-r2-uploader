@@ -3,6 +3,7 @@ package kim.biryeong;
 import com.google.gson.JsonElement;
 import eu.pb4.polymer.autohost.api.AutoHostUtils;
 import eu.pb4.polymer.autohost.impl.AutoHost;
+import eu.pb4.polymer.resourcepack.api.OutputGenerator;
 import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPut;
@@ -44,8 +45,11 @@ public final class R2ResourcePackUpload {
 		PolymerResourcePackUtils.RESOURCE_PACK_FINISHED_EVENT.register(R2ResourcePackUpload::uploadMainPack);
 	}
 
-	private static void uploadMainPack() {
-		Path packPath = PolymerResourcePackUtils.getMainPath();
+	static void uploadMainPack(Object output) {
+		if (!(output instanceof OutputGenerator.Result pack)) {
+			return;
+		}
+		Path packPath = pack.path();
 		R2UploadConfig config;
 
 		try {

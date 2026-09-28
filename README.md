@@ -1,15 +1,20 @@
 # rp-r2-uploader
 
-Fabric 1.21.8 template mod that uploads Polymer's generated server resource pack to Cloudflare R2 and lets Polymer AutoHost advertise the public R2 URL through the built-in `polymer:external` provider.
+Fabric 26.3 mod that uploads Polymer's generated server resource pack to Cloudflare R2 and lets Polymer AutoHost advertise the public R2 URL through the built-in `polymer:external` provider.
 
 No custom AutoHost provider is added. AutoHost only sends the external URL; this mod performs the upload when Polymer finishes generating the pack.
 
 ## Versions
 
-- Minecraft: `1.21.8`
-- Fabric Loader: `0.19.2`
-- Fabric API: `0.136.1+1.21.8`
-- Polymer AutoHost: `0.13.13+1.21.8`
+- Minecraft: `26.3`
+- Java: `25`
+- Gradle: `9.7.1`
+- Fabric Loom: `1.18.2` (`net.fabricmc.fabric-loom`)
+- Fabric Loader: `0.19.5`
+- Fabric API: `0.161.0+26.3`
+- Polymer AutoHost: `0.18.2+26.3`
+
+Minecraft 26.1 and newer are unobfuscated. This branch follows the [Fabric porting guide](https://docs.fabricmc.net/26.1.2/develop/porting/): no mappings dependency or remapping task is used; `jar` produces the distributable mod.
 
 ## AutoHost Config
 
@@ -106,7 +111,7 @@ The task uses the same signing and upload code as the server event hook. It prin
 
 1. Polymer AutoHost generates the resource pack.
 2. `PolymerResourcePackUtils.RESOURCE_PACK_FINISHED_EVENT` fires.
-3. This mod reads `PolymerResourcePackUtils.getMainPath()`.
+3. This mod reads the ZIP path from the event's `OutputGenerator.Result`; non-ZIP output is ignored.
 4. The zip SHA-1 is calculated.
 5. The zip is uploaded to `polymer/resources+<sha1>.zip` in R2.
 6. Polymer `polymer:external` sends `<publicBaseUrl>/polymer/resources+<sha1>.zip` to Minecraft clients.
@@ -121,7 +126,7 @@ Build:
 ./gradlew build --console=plain
 ```
 
-The build runs `verifyR2Uploader`, which checks that the R2 key format matches Polymer AutoHost's hashed main-pack path.
+The build runs `verifyR2Uploader`, which checks the Polymer AutoHost key/URL format, ZIP completion handling, DNS failover, signed request body, HTTP errors, and redirect handling. The distributable is `build/libs/rp-r2-uploader-1.0.1+26.3.jar`.
 
 Run a server and watch for both Polymer generation and R2 upload logs:
 
