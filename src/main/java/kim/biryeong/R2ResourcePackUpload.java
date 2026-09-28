@@ -4,15 +4,19 @@ import com.google.gson.JsonElement;
 import eu.pb4.polymer.autohost.api.AutoHostUtils;
 import eu.pb4.polymer.autohost.impl.AutoHost;
 import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
+import org.apache.http.client.config.RequestConfig;
+import org.apache.http.client.methods.HttpPut;
+import org.apache.http.entity.ByteArrayEntity;
+import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.impl.client.HttpClients;
+import org.apache.http.util.EntityUtils;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -123,9 +127,23 @@ public final class R2ResourcePackUpload {
 	}
 
 	private static UploadResult uploadPrepared(R2UploadConfig config, PreparedUpload upload) throws Exception {
-		var uploader = new R2SignedUploader(HttpClient.newHttpClient(), Clock.systemUTC());
-		uploader.putObject(config, upload.objectKey(), upload.objectUri(), upload.packBytes(), upload.payloadSha256());
+		try (var client = uploadClientBuilder().build()) {
+			var uploader = new R2SignedUploader(client, Clock.systemUTC());
+			uploader.putObject(config, upload.objectKey(), upload.objectUri(), upload.packBytes(), upload.payloadSha256());
+		}
 		return new UploadResult(upload.objectKey(), upload.publicUrl(), upload.sha1(), upload.packBytes().length, CONTENT_TYPE);
+	}
+
+	static HttpClientBuilder uploadClientBuilder() {
+		// Try each DNS address on connect failure without changing the signed host or TLS identity.
+		return HttpClients.custom()
+				.setDefaultRequestConfig(RequestConfig.custom()
+						.setConnectTimeout(5_000)
+						.setConnectionRequestTimeout(5_000)
+						.setSocketTimeout(120_000)
+						.build())
+				.disableAutomaticRetries()
+				.disableRedirectHandling();
 	}
 
 	static String objectKey(String sha1) {
@@ -250,16 +268,16 @@ public final class R2ResourcePackUpload {
 		}
 	}
 
-	private static final class R2SignedUploader {
-		private final HttpClient client;
+	static final class R2SignedUploader {
+		private final CloseableHttpClient client;
 		private final Clock clock;
 
-		private R2SignedUploader(HttpClient client, Clock clock) {
+		R2SignedUploader(CloseableHttpClient client, Clock clock) {
 			this.client = client;
 			this.clock = clock;
 		}
 
-		private void putObject(R2UploadConfig config, String objectKey, URI uri, byte[] body, String payloadSha256)
+		void putObject(R2UploadConfig config, String objectKey, URI uri, byte[] body, String payloadSha256)
 				throws Exception {
 			String amzDate = AMZ_DATE_FORMAT.format(clock.instant());
 			String dateStamp = DATE_STAMP_FORMAT.format(clock.instant());
@@ -290,17 +308,18 @@ public final class R2ResourcePackUpload {
 					+ "SignedHeaders=" + signedHeaders + ", "
 					+ "Signature=" + signature;
 
-			HttpRequest request = HttpRequest.newBuilder(uri)
-					.header("Authorization", authorization)
-					.header("Content-Type", CONTENT_TYPE)
-					.header("x-amz-content-sha256", payloadSha256)
-					.header("x-amz-date", amzDate)
-					.PUT(HttpRequest.BodyPublishers.ofByteArray(body))
-					.build();
-			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-
-			if (response.statusCode() < 200 || response.statusCode() >= 300) {
-				throw new IOException("R2 PUT failed with HTTP " + response.statusCode() + ": " + response.body());
+			HttpPut request = new HttpPut(uri);
+			request.setHeader("Authorization", authorization);
+			request.setHeader("Content-Type", CONTENT_TYPE);
+			request.setHeader("x-amz-content-sha256", payloadSha256);
+			request.setHeader("x-amz-date", amzDate);
+			request.setEntity(new ByteArrayEntity(body));
+			try (var response = client.execute(request)) {
+				int status = response.getStatusLine().getStatusCode();
+				if (status < 200 || status >= 300) {
+					String error = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
+					throw new IOException("R2 PUT failed with HTTP " + status + ": " + error);
+				}
 			}
 		}
 

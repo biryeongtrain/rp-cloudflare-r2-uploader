@@ -74,7 +74,7 @@ If `config/rp-r2-uploader.json` is missing, the mod creates a placeholder file a
 
 Do not commit `config/rp-r2-uploader.json`; it is ignored by `.gitignore`.
 
-The uploader uses Cloudflare R2's S3-compatible API directly with Java `HttpClient` and AWS Signature V4. It sends:
+The uploader uses Cloudflare R2's S3-compatible API with Apache HttpClient and AWS Signature V4. If one DNS address cannot connect within 5 seconds, it tries the remaining addresses. TLS certificate and hostname verification remain enabled; no IP address is pinned. Response reads time out after 120 seconds of inactivity. HTTP errors are not retried, and redirects are not followed with signed credentials. It sends:
 
 ```text
 Content-Type: application/zip
