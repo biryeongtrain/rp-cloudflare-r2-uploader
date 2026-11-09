@@ -5,6 +5,7 @@ import eu.pb4.polymer.autohost.api.AutoHostUtils;
 import eu.pb4.polymer.autohost.impl.AutoHost;
 import eu.pb4.polymer.resourcepack.api.OutputGenerator;
 import eu.pb4.polymer.resourcepack.api.PolymerResourcePackUtils;
+import net.minecraft.resources.Identifier;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.ByteArrayEntity;
@@ -51,9 +52,11 @@ public final class R2ResourcePackUpload {
 		}
 		Path packPath = pack.path();
 		R2UploadConfig config;
+		R2UploaderModConfig.Settings settings;
 
 		try {
-			config = R2UploaderModConfig.load();
+			settings = R2UploaderModConfig.loadSettings();
+			config = settings.upload();
 		} catch (IOException e) {
 			Rpr2uploader.LOGGER.warn(
 					"Skipping Polymer resource pack R2 upload: {} AutoHost may advertise an unavailable R2 URL until the config is filled in.",
@@ -94,6 +97,15 @@ public final class R2ResourcePackUpload {
 					result.sha1(),
 					result.contentType()
 			);
+			for (var extra : settings.additionalPacks()) {
+				try {
+					var published = uploadPack(extra.id(), extra.path(), config);
+					Rpr2uploader.LOGGER.info("Uploaded additional resource pack: id={}, url={}, sha1={}, size={} bytes",
+							extra.id(), published.publicUrl(), published.sha1(), published.size());
+				} catch (Exception e) {
+					Rpr2uploader.LOGGER.error("Failed to upload additional resource pack '{}'; it must not be offered to clients", extra.id(), e);
+				}
+			}
 		} catch (Exception e) {
 			Rpr2uploader.LOGGER.error(
 				"Failed to upload Polymer resource pack to R2. AutoHost may advertise a URL that is not available until this is fixed.",
@@ -102,11 +114,27 @@ public final class R2ResourcePackUpload {
 		}
 	}
 
+	/** Blocking upload for other server mods. Call after generating the ZIP, away from the server tick thread.
+	 * The returned URL/hash may be offered to clients only after this method succeeds.
+	 */
+	public static UploadResult uploadPack(String packId, Path packPath) throws Exception {
+		return uploadPack(packId, packPath, R2UploaderModConfig.load());
+	}
+
 	static UploadResult uploadPack(Path packPath, R2UploadConfig config) throws Exception {
 		return uploadPrepared(config, prepareUpload(packPath, config));
 	}
 
+	static UploadResult uploadPack(String packId, Path packPath, R2UploadConfig config) throws Exception {
+		return uploadPrepared(config, prepareUpload(packId, packPath, config));
+	}
+
 	static PreparedUpload prepareUpload(Path packPath, R2UploadConfig config) throws Exception {
+		return prepareUpload(AutoHostUtils.DEFAULT_PACK_ID.toString(), packPath, config);
+	}
+
+	static PreparedUpload prepareUpload(String packId, Path packPath, R2UploadConfig config) throws Exception {
+		String validated = validatePackId(packId);
 		if (!config.isComplete()) {
 			throw new IllegalStateException("Cannot upload Polymer resource pack to R2: " + config.missingMessage());
 		}
@@ -118,7 +146,7 @@ public final class R2ResourcePackUpload {
 		byte[] packBytes = Files.readAllBytes(packPath);
 		String sha1 = hexDigest("SHA-1", packBytes);
 		String payloadSha256 = hexDigest("SHA-256", packBytes);
-		String objectKey = objectKey(sha1);
+		String objectKey = objectKey(validated, sha1);
 		return new PreparedUpload(
 				packPath,
 				packBytes,
@@ -151,7 +179,22 @@ public final class R2ResourcePackUpload {
 	}
 
 	static String objectKey(String sha1) {
-		return AutoHostUtils.getPathFromId(AutoHostUtils.DEFAULT_PACK_ID) + "+" + sha1 + ".zip";
+		return objectKey(AutoHostUtils.DEFAULT_PACK_ID.toString(), sha1);
+	}
+
+	static String objectKey(String packId, String sha1) {
+		if (sha1 == null || !sha1.matches("[0-9a-f]{40}")) throw new IllegalArgumentException("Invalid pack SHA-1");
+		return AutoHostUtils.getPathFromId(Identifier.parse(validatePackId(packId))) + "+" + sha1 + ".zip";
+	}
+
+	static String validatePackId(String id) {
+		if (id == null || !id.matches("[a-z0-9_.-]+:[a-z0-9_./-]+"))
+			throw new IllegalArgumentException("Pack id must be a namespaced identifier, for example destiny:exodus_crash");
+		for (String segment : id.replace(':', '/').split("/", -1)) {
+			if (segment.isEmpty() || segment.equals(".") || segment.equals(".."))
+				throw new IllegalArgumentException("Pack id must not contain empty or traversal path segments");
+		}
+		return id;
 	}
 
 	private static boolean validateAutoHostConfig(R2UploadConfig config, String objectKey, String publicUrl) {
@@ -212,7 +255,7 @@ public final class R2ResourcePackUpload {
 		return HexFormat.of().formatHex(digest.digest(bytes));
 	}
 
-	static final record UploadResult(String objectKey, String publicUrl, String sha1, int size, String contentType) {
+	public record UploadResult(String objectKey, String publicUrl, String sha1, int size, String contentType) {
 	}
 
 	static final record PreparedUpload(
@@ -267,7 +310,7 @@ public final class R2ResourcePackUpload {
 		}
 
 		String publicUrl(String objectKey) {
-			String base = publicBaseUrl.endsWith("/") ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1) : publicBaseUrl;
+			String base = normalizeBaseUrl(publicBaseUrl);
 			return base + "/" + objectKey;
 		}
 	}

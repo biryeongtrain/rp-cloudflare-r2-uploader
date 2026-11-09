@@ -63,7 +63,20 @@ tasks.register("uploadR2ResourcePack", JavaExec) {
 	dependsOn tasks.classes
 	doFirst {
 		systemProperty "rpr2uploader.config", providers.gradleProperty("r2ConfigPath").orElse("run/config/rp-r2-uploader.json").get()
-		args providers.gradleProperty("packPath").orElse("run/polymer/resource_pack.zip").get()
+		setArgs([providers.gradleProperty("packPath").orElse("run/polymer/resource_pack.zip").get(),
+				providers.gradleProperty("packId").orElse("polymer:resources").get()])
+	}
+}
+
+tasks.register("uploadR2ResourcePacks", JavaExec) {
+	group = "upload"
+	description = "Uploads the main pack and all configured additional resource packs to R2."
+	classpath = sourceSets.main.runtimeClasspath
+	mainClass = "kim.biryeong.R2ResourcePackUploadTool"
+	dependsOn tasks.classes
+	doFirst {
+		systemProperty "rpr2uploader.config", providers.gradleProperty("r2ConfigPath").orElse("run/config/rp-r2-uploader.json").get()
+		setArgs(["--all", providers.gradleProperty("packPath").orElse("run/polymer/resource_pack.zip").get()])
 	}
 }
 
